@@ -6,7 +6,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 TILL_NUMBER = "1611583"
 CHANNEL_LINK = os.environ.get("CHANNEL_LINK", "https://t.me/+vXKBKovKUKUyODg8")
-PRICE = 20
+PRICE = 10
 
 app = Flask(__name__)
 @app.route('/')
