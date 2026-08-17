@@ -1,42 +1,66 @@
-import os, re, threading
+import os, threading, re, json
 from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-TILL_NUMBER = "1611583"
-CHANNEL_LINK = os.environ.get("CHANNEL_LINK", "https://t.me/+vXKBKovKUKUyODg8")
-PRICE = 10
+TILL = "1611583"
+LINK = "https://t.me/+vXKBKovKUKUyODg8"
+FILE = "/tmp/codes.json"
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return f"Bot Live - Till {TILL_NUMBER}"
+def home(): return "Live - Strict Manual Mode"
+
+def load():
+    try:
+        with open(FILE) as f: return json.load(f)
+    except: return []
+
+def save(c):
+    try:
+        with open(FILE, "w") as f: json.dump(c, f)
+    except: pass
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = f"🔥 ANYTHING TRENDY PREMIUM\n\nUnlock VIP\n💰 Ksh {PRICE} - 24Hrs\n🏦 Till: {TILL_NUMBER}\n\n👇 Click:"
-    keyboard = [
-        [InlineKeyboardButton(f"💳 Pay Ksh {PRICE} - Till {TILL_NUMBER}", callback_data="pay")],
-        [InlineKeyboardButton("✅ I Have Paid - Get Link", callback_data="paid")]
+    txt = f"🔥 ANYTHING TRENDY VIP\n\n💰 Ksh 20 - Till {TILL}\n\nPay first, then send M-Pesa code."
+    kb = [
+        [InlineKeyboardButton(f"💳 How to Pay Till {TILL}", callback_data="pay")],
+        [InlineKeyboardButton("📱 I Have Code", callback_data="code")]
     ]
-    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text(txt, reply_markup=InlineKeyboardMarkup(kb))
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def btn(update: Update, context: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     await q.answer()
     if q.data == "pay":
-        msg = f"👑 Pay Ksh {PRICE}\n\nTill: **{TILL_NUMBER}**\nAmount: {PRICE}\n\n1. M-Pesa > Buy Goods\n2. Till: {TILL_NUMBER}\n3. Amount: {PRICE}\n\nAfter pay click I Have Paid"
-        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ I Have Paid", callback_data="paid")]]), parse_mode="Markdown")
+        await q.edit_message_text(
+            f"Pay Ksh 20 to Till **{TILL}**\n\n1. M-Pesa > Lipa > Buy Goods\n2. Till: {TILL}\n3. Amount: 20\n\nYou will get SMS with code like **SH12AB34CD**\nSend THAT code here. Don't type 'paid'.",
+            parse_mode="Markdown"
+        )
     else:
-        await q.edit_message_text("📱 Send your M-Pesa code like UHHKG2RW49\nOr type 'paid'")
+        await q.edit_message_text("Send your 10-char M-Pesa code, e.g. UHHKG2RW49")
 
-async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    txt = update.message.text.strip().upper()
-    # Accept ANY mpesa code or word paid
-    if len(txt) >= 4:  # Accept everything now to fix error
-        reply = f"✅ Payment Received! Till {TILL_NUMBER}\n\n🎉 VIP Link:\n{CHANNEL_LINK}\n\nClick to join. Don't share!"
-        await update.message.reply_text(reply)
-    else:
-        await update.message.reply_text("Send code")
+async def msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    code = update.message.text.strip().upper()
+    used = load()
+
+    # BLOCK paid, hello, anything not 10 chars
+    if code == "PAID":
+        await update.message.reply_text("❌ Don't type 'paid'. Send the real M-Pesa code like UHHKG2RW49 from your M-Pesa SMS.")
+        return
+
+    if not re.match(r"^[A-Z0-9]{10}$", code):
+        await update.message.reply_text(f"❌ Invalid code: {code}\n\nMust be exactly 10 letters/numbers like UHHKG2RW49\n\nPay Till {TILL} first!")
+        return
+
+    if code in used:
+        await update.message.reply_text(f"❌ Code {code} already used! One code = one person.")
+        return
+
+    used.append(code)
+    save(used)
+    await update.message.reply_text(f"✅ Code {code} OK!\n\nVIP Link:\n{LINK}\n\nJoin now. I will verify this code in M-Pesa app later.")
 
 def run_flask():
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
@@ -44,9 +68,9 @@ def run_flask():
 def run_bot():
     b = ApplicationBuilder().token(BOT_TOKEN).build()
     b.add_handler(CommandHandler("start", start))
-    b.add_handler(CallbackQueryHandler(buttons))
-    b.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
-    print("FIXED - Accepts MPesa codes")
+    b.add_handler(CallbackQueryHandler(btn))
+    b.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, msg))
+    print("STRICT MANUAL LIVE")
     b.run_polling()
 
 if __name__ == '__main__':
