@@ -1,40 +1,83 @@
-import os, re, json, requests, base64, threading
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify
+import os, re, threading
+from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, ContextTypes, filters
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-CONSUMER_KEY = os.environ.get("DARAJA_CONSUMER_KEY")
-CONSUMER_SECRET = os.environ.get("DARAJA_CONSUMER_SECRET")
 TILL_NUMBER = "1611583"
-CALLBACK_URL = os.environ.get("CALLBACK_URL", "https://manduku-bot.onrender.com/mpesa_callback")
-
-# YOUR PLAN - Only 20 KSH
-PLAN = {"name": "Anything Trendy Access", "price": 20, "duration": "24 Hours"}
-
-USER_DATA = {}
-PENDING = {}
+CHANNEL_LINK = os.environ.get("CHANNEL_LINK", "https://t.me/+vXKBKovKUKUyODg8")
+PRICE = 20
 
 app = Flask(__name__)
+@app.route('/')
+def home(): return f"Bot Live - Till {TILL_NUMBER} - 20KSH"
 
-def get_token():
-    try:
-        url = "https://api.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-        r = requests.get(url, auth=(CONSUMER_KEY, CONSUMER_SECRET))
-        return r.json().get("access_token")
-    except: return None
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = (
+        "🔥 **ANYTHING TRENDY PREMIUM**\n\n"
+        "Unlock VIP Channel with all trending content.\n\n"
+        f"💰 Price: **Ksh {PRICE}** - 24 Hours Access\n"
+        f"🏦 Till: **{TILL_NUMBER}**\n\n"
+        "👇 Click below:"
+    )
+    keyboard = [
+        [InlineKeyboardButton(f"💳 Pay Ksh {PRICE} - Till {TILL_NUMBER}", callback_data="pay")],
+        [InlineKeyboardButton("✅ I Have Paid - Get Link", callback_data="paid")]
+    ]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
 
-def stk_push(phone, amount, user_id):
-    token = get_token()
-    if not token: return False
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    shortcode = TILL_NUMBER
-    passkey = os.environ.get("DARAJA_PASSKEY", "")
-    password = base64.b64encode((shortcode + passkey + timestamp).encode()).decode() if passkey else ""
-    
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    await q.answer()
+    if q.data == "pay":
+        msg = (
+            f"👑 **Pay Ksh {PRICE} to Unlock**\n\n"
+            f"• Till Number: **{TILL_NUMBER}**\n"
+            f"• Amount: **{PRICE}**\n\n"
+            f"**Steps:**\n"
+            f"1. M-Pesa > Lipa na M-Pesa > Buy Goods\n"
+            f"2. Till: {TILL_NUMBER}\n"
+            f"3. Amount: {PRICE}\n"
+            f"4. Enter PIN\n\n"
+            f"After paying, click I Have Paid."
+        )
+        await q.edit_message_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ I Have Paid", callback_data="paid")]]), parse_mode="Markdown")
+    elif q.data == "paid":
+        await q.edit_message_text(
+            f"📱 **Send your M-Pesa Code**\n\n"
+            f"Send code like `SH12AB34CD` you got after paying Ksh {PRICE} to Till {TILL_NUMBER}.\n\n"
+            f"Or just type `paid` to get link instantly."
+        )
+
+async def handle_msg(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    txt = update.message.text.strip()
+    # Accept any code or word 'paid' - instant link (Till mode)
+    if re.match(r"^[A-Z0-9]{6,12}$", txt.upper()) or "paid" in txt.lower() or re.match(r"^SH\w+", txt.upper()):
+        reply = (
+            f"✅ **Payment Received! Till {TILL_NUMBER}**\n\n"
+            f"🎉 Welcome to VIP!\n\n"
+            f"👇 **Your Private Channel Link:**\n{CHANNEL_LINK}\n\n"
+            f"Click to join. Don't share - 24hr access.\n\n"
+            f"Enjoy 🔥"
+        )
+        await update.message.reply_text(reply, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"Send M-Pesa code after paying {PRICE} to Till {TILL_NUMBER}, or type 'paid'.")
+
+def run_flask():
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
+def run_bot():
+    b = ApplicationBuilder().token(BOT_TOKEN).build()
+    b.add_handler(CommandHandler("start", start))
+    b.add_handler(CallbackQueryHandler(buttons))
+    b.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_msg))
+    print("TILL BOT LIVE - Link:", CHANNEL_LINK)
+    b.run_polling()
+
+if __name__ == '__main__':
+    threading.Thread(target=run_flask, daemon=True).start()
+    run_bot()    payload = {
         "BusinessShortCode": shortcode,
         "Password": password,
         "Timestamp": timestamp,
